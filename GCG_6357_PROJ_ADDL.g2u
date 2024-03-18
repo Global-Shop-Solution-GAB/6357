@@ -1,0 +1,111 @@
+﻿Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'TJS, Oct 2021
+'Updated to include salesperson as a mandatory field on Quick Quotes
+
+	'Customer: Harding
+	'Developer: FEQ (Sisco)
+	'Date: 05/19/2021
+	'This project will be attached to a handful of hooks in the Harding system. This is to help them with their project number logic.
+	'On the quick quote screen, we will re-label the Delivery field to say 'Project' instead 
+	'(Hook 10710, passed variable 000126)
+	'On the quick quote screen, we will verify that data in the 'Project' textbox has been filled in before they save a new quote. If no data, they will not be allowed to save and a message will be displayed. 
+	'(Hook 10922, passed variable to check 000026, passed variable to keep from save 777777)
+	'When a user creates a work order from a BOM sales order, we will be copying the value in the Mark Shipment textbox from teh sales order into the Comments_1 textbox 
+	'(Hook 17261, Sales order is passed in 009002, Created work order is passed in 009000, created work order sequence is passed in 009001)
+
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+V.Local.sSalesOrder.Declare(String, "")
+V.Local.sWorkOrder.Declare(String, "")
+V.Local.sSuffix.Declare(String, "")
+V.Local.sProject.Declare(String, "")
+V.Local.sSP.Declare
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+
+F.Intrinsic.Control.Case(10710)
+	'Changing the label in the quote screen
+	V.Passed.000126.Set("Project")
+	
+F.Intrinsic.Control.Case(11560)
+	'Changing the label in the sales order header screen
+	V.Passed.000103.Set("Project")
+	
+F.Intrinsic.Control.Case(10922)
+	
+	'This process is only going to take place on new quotes, so the switches flag will return an 'N' (presumably for New)
+	F.Intrinsic.Control.If(V.Caller.Switches, =, "N")
+		'Verify the Project field has information in it.
+		V.Local.sProject.Set(V.Passed.000026)
+		V.Local.sSP.Set(V.Passed.000030) 
+		F.Intrinsic.Control.If(V.Local.sProject.Trim, =, "")
+			F.Intrinsic.UI.Msgbox("Please fill in the project field before saving quote or attempting to add any lines.", "QUOTE HAS NOT BEEN SAVED")
+			
+			V.Passed.777777.Set("Y")
+		F.Intrinsic.Control.ElseIf(V.Local.sSP.Trim,=,"") ' TJS - Checking to see if salesperson field is populated
+			F.Intrinsic.UI.Msgbox("Please select a Salesperson before saving quote or attempting to add any lines.", "QUOTE HAS NOT BEEN SAVED")
+			
+			V.Passed.777777.Set("Y")
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+	
+F.Intrinsic.Control.Case(17261)
+	'This hook is fired for every work order that gets created when the user creates a work order from a sales order in Shop Floor Control > File > Work Orders > New and they click on BOM - Order Entry.
+	V.Local.sSalesOrder.Set(V.Passed.009002)
+	V.Local.sWorkOrder.Set(V.Passed.009000)
+	V.Local.sSuffix.Set(V.Passed.009001)
+
+''----------------------------------------------------------------------------- TESTING
+'F.Intrinsic.Control.CaseElse
+
+'Function.Intrinsic.Debug.InvokeDebugger
+'Function.Intrinsic.Debug.Stop
+
+'	V.Local.sSalesOrder.Set("0000202")
+'	V.Local.sWorkOrder.Set("000155")
+'	V.Local.sSuffix.Set("001")
+''------------------------------------------------------------------------------- TESTING
+	F.ODBC.Connection!conx.OpenCompanyConnection
+	
+	F.Intrinsic.String.Build("select top 1 MARK_INFO from V_ORDER_HEADER where ORDER_NO = '{0}'", V.Local.sSalesOrder, V.Local.sSql)
+	F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql, V.Local.sProject)
+	F.Intrinsic.String.Left(V.Local.sProject.Trim, 70, V.Local.sProject)
+	
+	F.Intrinsic.String.Build("Select * from JOB_HEADER where JOB = '{0}' and SUFFIX = '{1}'", V.Local.sWorkOrder, V.Local.sSuffix, V.Local.sSql)
+	F.ODBC.Connection!conx.OpenLocalRecordsetRW("rstProj", V.Local.sSql)
+	
+	F.Intrinsic.Control.DoUntil(V.ODBC.conx!rstProj.EOF, =, True)
+		
+		F.ODBC.conx!rstProj.Set!COMMENTS_1(V.Local.sProject)
+		F.ODBC.conx!rstProj.Update
+		
+		F.ODBC.conx!rstProj.MoveNext
+	F.Intrinsic.Control.Loop
+	
+	F.ODBC.conx!rstProj.Close
+	
+	F.ODBC.Connection!conx.Close
+	
+F.Intrinsic.Control.CaseElse
+	'In case this is attached to anything else, we just terminate the program
+	F.Intrinsic.Control.End
+	
+F.Intrinsic.Control.EndSelect
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Ambient.CurrentSubroutine, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError, "")
+	F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Comments.Start
+${$5$}$2.0.0.0$}$2
+${$6$}$tsmith$}$20211015110925790$}$xqPbj9atw05FglvzeFsZ9cqXP+qvG6tXRIVpxGKlMJz/Bx7cLch2jI7sp2w5fk3OWXFOoRdKrio=
+Program.Sub.Comments.End
